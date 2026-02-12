@@ -2,6 +2,9 @@ const express = require("express");
 const axios = require("axios");
 const admin = require("firebase-admin");
 
+// ========================================
+// FIREBASE
+// ========================================
 const serviceAccount = require("./firebase.json");
 
 admin.initializeApp({
@@ -10,21 +13,23 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
+// ========================================
 const app = express();
 app.use(express.json());
 
+// ========================================
+// CONFIG
+// ========================================
 const TOKEN = "EAALYR4Vve2QBQlfg2HwJkfOUKDN8jJpPZBPaiUQJ2ZAZCe0O7MRkZCaLqqlmLZCFdX3LXQceXehsOQUjWjbZAckh8ZCPpRez69bkWz1nex3gsEqCZAinRnSZAsO1j4ZC2pYZAKWS7LJSsRQCJZAFIPZA1KBikZAFdqfYAbbFrnyzmjySY92nAEMi7NRjcJBsb5WIouOdgjnZBBg9hXL8gevGk8hZCJG0GZC97rgR9tZAeTzYZAEtGZAyOvXicl6ipF2tZBFK6uZCMXrnQTQFZADulV05FbzcwZABcapQeGZAY";
 const PHONE_NUMBER_ID = "1008190442377078";
 const VERIFY_TOKEN = "123456";
 
-
 // ========================================
-// ROTA RAIZ (RAILWAY PRECISA)
+// ROTA RAIZ (HEALTH CHECK)
 // ========================================
 app.get("/", (req, res) => {
   res.status(200).send("BOT ONLINE 🚀");
 });
-
 
 // ========================================
 // ENVIAR MENSAGEM
@@ -46,13 +51,12 @@ async function sendMessage(to, text) {
       }
     );
   } catch (e) {
-    console.log("Erro ao enviar mensagem:", e.response?.data || e.message);
+    console.log("Erro ao enviar:", e.response?.data || e.message);
   }
 }
 
-
 // ========================================
-// VERIFICAR WEBHOOK
+// VERIFICAÇÃO WEBHOOK
 // ========================================
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -65,7 +69,6 @@ app.get("/webhook", (req, res) => {
   res.sendStatus(403);
 });
 
-
 // ========================================
 // RECEBER MENSAGENS
 // ========================================
@@ -77,15 +80,13 @@ app.post("/webhook", async (req, res) => {
     const from = msg.from;
     const text = msg.text?.body?.trim();
 
-    console.log("Mensagem recebida:", from, text);
+    console.log("Mensagem:", from, text);
 
     const restauranteId = "rest_01";
-    const restRef = db.collection("restaurantes").doc(restauranteId);
-    const restDoc = await restRef.get();
 
-    // 🔥 SE NÃO EXISTIR RESTAURANTE → NÃO QUEBRA MAIS
+    const restDoc = await db.collection("restaurantes").doc(restauranteId).get();
+
     if (!restDoc.exists) {
-      console.log("Restaurante não encontrado");
       await sendMessage(from, "Restaurante não configurado.");
       return res.sendStatus(200);
     }
@@ -93,7 +94,6 @@ app.post("/webhook", async (req, res) => {
     const rest = restDoc.data();
 
     if (!rest.cardapio) {
-      console.log("Cardápio não encontrado");
       await sendMessage(from, "Cardápio não configurado.");
       return res.sendStatus(200);
     }
@@ -117,7 +117,7 @@ app.post("/webhook", async (req, res) => {
     const cliente = clienteDoc.data();
 
     // =========================
-    // PEGAR NOME
+    // NOME
     // =========================
     if (cliente.etapa === "nome") {
       await clienteRef.update({
@@ -130,7 +130,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     // =========================
-    // PEGAR ENDEREÇO
+    // ENDEREÇO
     // =========================
     if (cliente.etapa === "endereco") {
       await clienteRef.update({
@@ -159,15 +159,17 @@ app.post("/webhook", async (req, res) => {
         return res.sendStatus(200);
       }
 
+      const taxa = rest.taxaEntrega || 0;
+
       const pedidoRef = await db.collection("pedidos").add({
         restaurante: restauranteId,
         cliente: from,
         nomeCliente: cliente.nome,
         endereco: cliente.endereco,
         itens: [produto],
-        total: produto.preco + (rest.taxaEntrega || 0),
+        total: produto.preco + taxa,
         status: "montando",
-        taxaEntrega: rest.taxaEntrega || 0,
+        taxaEntrega: taxa,
       });
 
       await clienteRef.update({
@@ -177,8 +179,9 @@ app.post("/webhook", async (req, res) => {
 
       await sendMessage(
         from,
-        `Adicionado 🛒\nEntrega: R$${rest.taxaEntrega || 0}\nTotal: R$${produto.preco + (rest.taxaEntrega || 0)}\n\n1 pagar\n2 adicionar mais`
+        `Adicionado 🛒\nEntrega: R$${taxa}\nTotal: R$${produto.preco + taxa}\n\n1 pagar\n2 adicionar mais`
       );
+
       return res.sendStatus(200);
     }
 
@@ -186,8 +189,7 @@ app.post("/webhook", async (req, res) => {
     // CARRINHO
     // =========================
     if (cliente.etapa === "carrinho") {
-      const pedidoRef = db.collection("pedidos").doc(cliente.pedidoId);
-      const pedidoDoc = await pedidoRef.get();
+      const pedidoDoc = await db.collection("pedidos").doc(cliente.pedidoId).get();
 
       if (!pedidoDoc.exists) {
         await sendMessage(from, "Pedido não encontrado.");
@@ -198,7 +200,9 @@ app.post("/webhook", async (req, res) => {
 
       if (text === "1") {
         await clienteRef.update({ etapa: "pagamento" });
-        await pedidoRef.update({ status: "aguardando_pagamento" });
+        await db.collection("pedidos").doc(cliente.pedidoId).update({
+          status: "aguardando_pagamento",
+        });
 
         await sendMessage(
           from,
@@ -223,12 +227,27 @@ app.post("/webhook", async (req, res) => {
 
     res.sendStatus(200);
   } catch (e) {
-    console.log("ERRO GERAL:", e.response?.data || e.message);
-    res.sendStatus(200); // nunca deixa o Railway matar
+    console.log("ERRO:", e.response?.data || e.message);
+    res.sendStatus(200);
   }
 });
 
-
+// ========================================
+// START SERVER (IMPORTANTE PRO RAILWAY)
 // ========================================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Sistema rodando 🚀"));
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor online na porta ${PORT} 🚀`);
+});
+
+// ========================================
+// PROTEÇÃO ANTI CRASH
+// ========================================
+process.on("unhandledRejection", (err) => {
+  console.log("Erro não tratado:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.log("Exceção:", err);
+});
