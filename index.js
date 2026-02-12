@@ -22,7 +22,7 @@ const VERIFY_TOKEN = "123456";
 // ROTA RAIZ (OBRIGATÓRIA PRO RAILWAY)
 // ========================================
 app.get("/", (req, res) => {
-  res.send("BOT ONLINE");
+  res.status(200).send("BOT ONLINE 🚀");
 });
 
 
@@ -56,9 +56,9 @@ app.get("/webhook", (req, res) => {
   const token = req.query["hub.verify_token"];
 
   if (mode && token === VERIFY_TOKEN) {
-    res.status(200).send(challenge);
+    return res.status(200).send(challenge);
   } else {
-    res.sendStatus(403);
+    return res.sendStatus(403);
   }
 });
 
@@ -68,6 +68,8 @@ app.get("/webhook", (req, res) => {
 // ========================================
 app.post("/webhook", async (req, res) => {
   try {
+    console.log("Webhook recebido");
+
     const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!msg) return res.sendStatus(200);
 
@@ -196,13 +198,19 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    res.sendStatus(200);
+    return res.sendStatus(200);
   } catch (e) {
-    console.log(e.response?.data || e.message);
-    res.sendStatus(500);
+    console.log("ERRO:", e.response?.data || e.message);
+    return res.sendStatus(500);
   }
 });
 
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Sistema rodando 🚀"));
+// ========================================
+// INICIAR SERVIDOR (CORREÇÃO DO RAILWAY)
+// ========================================
+const PORT = process.env.PORT;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("Servidor online na porta", PORT);
+});
