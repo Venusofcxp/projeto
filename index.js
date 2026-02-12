@@ -13,14 +13,22 @@ const db = admin.firestore();
 const app = express();
 app.use(express.json());
 
-const TOKEN = "EAALYR4Vve2QBQo5f6xlFBlUVPbWHjPnSJWYFSm427Tkghf2ztLTM5ID1oEu7YYwzvgFiIGnoAfrkQZBDSCxPTC5r5ZAGM29P5e1k5Pt9ZChxdfuOwKSK4ZCZBBoTH4lZCKbjnRUiHRj20PeQiL23HujHaDZAAsn6ONwU6tPACFc9zbo3gi7GhlflOsiWzm0hfme1yqa83mbWuMjvSx6UDYodIeH1ONB5XmguGOOiLZCuhDa3UhizM2W43fIZCdIuv9YzrbTLgDkDI9TXZBw64kcWXZAqOZB5";
+const TOKEN = "EAALYR4Vve2QBQlfg2HwJkfOUKDN8jJpPZBPaiUQJ2ZAZCe0O7MRkZCaLqqlmLZCFdX3LXQceXehsOQUjWjbZAckh8ZCPpRez69bkWz1nex3gsEqCZAinRnSZAsO1j4ZC2pYZAKWS7LJSsRQCJZAFIPZA1KBikZAFdqfYAbbFrnyzmjySY92nAEMi7NRjcJBsb5WIouOdgjnZBBg9hXL8gevGk8hZCJG0GZC97rgR9tZAeTzYZAEtGZAyOvXicl6ipF2tZBFK6uZCMXrnQTQFZADulV05FbzcwZABcapQeGZAY";
 const PHONE_NUMBER_ID = "1008190442377078";
 const VERIFY_TOKEN = "123456";
 
 
-// ================================
-// enviar mensagem
-// ================================
+// ========================================
+// ROTA RAIZ (OBRIGATÓRIA PRO RAILWAY)
+// ========================================
+app.get("/", (req, res) => {
+  res.send("BOT ONLINE");
+});
+
+
+// ========================================
+// ENVIAR MENSAGEM
+// ========================================
 async function sendMessage(to, text) {
   await axios.post(
     `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
@@ -39,9 +47,9 @@ async function sendMessage(to, text) {
 }
 
 
-// ================================
-// verificar webhook
-// ================================
+// ========================================
+// VERIFICAR WEBHOOK
+// ========================================
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const challenge = req.query["hub.challenge"];
@@ -55,9 +63,9 @@ app.get("/webhook", (req, res) => {
 });
 
 
-// ================================
-// receber mensagens
-// ================================
+// ========================================
+// RECEBER MENSAGENS
+// ========================================
 app.post("/webhook", async (req, res) => {
   try {
     const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -66,7 +74,7 @@ app.post("/webhook", async (req, res) => {
     const from = msg.from;
     const text = msg.text?.body?.trim();
 
-    const restauranteId = "rest_01"; // depois vira automático
+    const restauranteId = "rest_01";
     const restRef = db.collection("restaurantes").doc(restauranteId);
     const restDoc = await restRef.get();
     const rest = restDoc.data();
@@ -74,9 +82,9 @@ app.post("/webhook", async (req, res) => {
     const clienteRef = db.collection("clientes").doc(from);
     const clienteDoc = await clienteRef.get();
 
-    // =====================================
+    // =========================
     // NOVO CLIENTE
-    // =====================================
+    // =========================
     if (!clienteDoc.exists) {
       await clienteRef.set({
         etapa: "nome",
@@ -89,9 +97,9 @@ app.post("/webhook", async (req, res) => {
 
     const cliente = clienteDoc.data();
 
-    // =====================================
+    // =========================
     // PEGAR NOME
-    // =====================================
+    // =========================
     if (cliente.etapa === "nome") {
       await clienteRef.update({
         nome: text,
@@ -102,9 +110,9 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // =====================================
+    // =========================
     // PEGAR ENDEREÇO
-    // =====================================
+    // =========================
     if (cliente.etapa === "endereco") {
       await clienteRef.update({
         endereco: text,
@@ -121,9 +129,9 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // =====================================
+    // =========================
     // MENU
-    // =====================================
+    // =========================
     if (cliente.etapa === "menu") {
       const produto = rest.cardapio[text];
 
@@ -155,9 +163,9 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // =====================================
+    // =========================
     // CARRINHO
-    // =====================================
+    // =========================
     if (cliente.etapa === "carrinho") {
       const pedidoRef = db.collection("pedidos").doc(cliente.pedidoId);
       const pedidoDoc = await pedidoRef.get();
@@ -167,7 +175,6 @@ app.post("/webhook", async (req, res) => {
         await clienteRef.update({ etapa: "pagamento" });
         await pedidoRef.update({ status: "aguardando_pagamento" });
 
-        // 🔥 AQUI ENTRA INTEGRAÇÃO PIX FUTURA
         await sendMessage(
           from,
           `💳 Total R$${pedido.total}\n\n(Pix automático entra aqui)`
@@ -195,6 +202,7 @@ app.post("/webhook", async (req, res) => {
     res.sendStatus(500);
   }
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Sistema rodando 🚀"));
