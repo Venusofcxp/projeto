@@ -19,7 +19,7 @@ const VERIFY_TOKEN = "123456";
 
 
 // ========================================
-// ROTA RAIZ (OBRIGATÓRIA PRO RAILWAY)
+// ROTA RAIZ (RAILWAY PRECISA)
 // ========================================
 app.get("/", (req, res) => {
   res.status(200).send("BOT ONLINE 🚀");
@@ -30,20 +30,24 @@ app.get("/", (req, res) => {
 // ENVIAR MENSAGEM
 // ========================================
 async function sendMessage(to, text) {
-  await axios.post(
-    `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to,
-      text: { body: text },
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        "Content-Type": "application/json",
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to,
+        text: { body: text },
       },
-    }
-  );
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (e) {
+    console.log("Erro ao enviar mensagem:", e.response?.data || e.message);
+  }
 }
 
 
@@ -57,9 +61,8 @@ app.get("/webhook", (req, res) => {
 
   if (mode && token === VERIFY_TOKEN) {
     return res.status(200).send(challenge);
-  } else {
-    return res.sendStatus(403);
   }
+  res.sendStatus(403);
 });
 
 
@@ -68,18 +71,32 @@ app.get("/webhook", (req, res) => {
 // ========================================
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("Webhook recebido");
-
     const msg = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!msg) return res.sendStatus(200);
 
     const from = msg.from;
     const text = msg.text?.body?.trim();
 
+    console.log("Mensagem recebida:", from, text);
+
     const restauranteId = "rest_01";
     const restRef = db.collection("restaurantes").doc(restauranteId);
     const restDoc = await restRef.get();
+
+    // 🔥 SE NÃO EXISTIR RESTAURANTE → NÃO QUEBRA MAIS
+    if (!restDoc.exists) {
+      console.log("Restaurante não encontrado");
+      await sendMessage(from, "Restaurante não configurado.");
+      return res.sendStatus(200);
+    }
+
     const rest = restDoc.data();
+
+    if (!rest.cardapio) {
+      console.log("Cardápio não encontrado");
+      await sendMessage(from, "Cardápio não configurado.");
+      return res.sendStatus(200);
+    }
 
     const clienteRef = db.collection("clientes").doc(from);
     const clienteDoc = await clienteRef.get();
@@ -148,9 +165,9 @@ app.post("/webhook", async (req, res) => {
         nomeCliente: cliente.nome,
         endereco: cliente.endereco,
         itens: [produto],
-        total: produto.preco + rest.taxaEntrega,
+        total: produto.preco + (rest.taxaEntrega || 0),
         status: "montando",
-        taxaEntrega: rest.taxaEntrega,
+        taxaEntrega: rest.taxaEntrega || 0,
       });
 
       await clienteRef.update({
@@ -160,7 +177,7 @@ app.post("/webhook", async (req, res) => {
 
       await sendMessage(
         from,
-        `Adicionado 🛒\nEntrega: R$${rest.taxaEntrega}\nTotal: R$${produto.preco + rest.taxaEntrega}\n\n1 pagar\n2 adicionar mais`
+        `Adicionado 🛒\nEntrega: R$${rest.taxaEntrega || 0}\nTotal: R$${produto.preco + (rest.taxaEntrega || 0)}\n\n1 pagar\n2 adicionar mais`
       );
       return res.sendStatus(200);
     }
@@ -171,6 +188,12 @@ app.post("/webhook", async (req, res) => {
     if (cliente.etapa === "carrinho") {
       const pedidoRef = db.collection("pedidos").doc(cliente.pedidoId);
       const pedidoDoc = await pedidoRef.get();
+
+      if (!pedidoDoc.exists) {
+        await sendMessage(from, "Pedido não encontrado.");
+        return res.sendStatus(200);
+      }
+
       const pedido = pedidoDoc.data();
 
       if (text === "1") {
@@ -198,19 +221,14 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    return res.sendStatus(200);
+    res.sendStatus(200);
   } catch (e) {
-    console.log("ERRO:", e.response?.data || e.message);
-    return res.sendStatus(500);
+    console.log("ERRO GERAL:", e.response?.data || e.message);
+    res.sendStatus(200); // nunca deixa o Railway matar
   }
 });
 
 
 // ========================================
-// INICIAR SERVIDOR (CORREÇÃO DO RAILWAY)
-// ========================================
-const PORT = process.env.PORT;
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("Servidor online na porta", PORT);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Sistema rodando 🚀"));
