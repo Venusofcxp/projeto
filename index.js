@@ -22,7 +22,7 @@ app.use(express.json());
 // ========================================
 const TOKEN = "EAALYR4Vve2QBQiGoYeC7sEKQ0vZCOC8xZARVgCEumYNTtZB4TqPVJNiEHMosSuguqCgnBvXsOZAnFqBb8wwZAZBlDW15ZCuacRBUVWXU7mRnRmkC9XyjD8ZCrkcPVyuF8FHu68KasQkWrQ6Efd0CGa6ZAAEWtGrgn3uQqECH9osYhm2So460bldE8P3X2Ga8hvLIbLQZDZD";
 const PHONE_NUMBER_ID = "1008190442377078";
-const VERIFY_TOKEN = "123456";
+const VERIFY_TOKEN = "Venus45";
 
 // ========================================
 // ROTA RAIZ (HEALTH CHECK)
